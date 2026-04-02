@@ -2,7 +2,70 @@ import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { FiHome, FiMaximize2, FiCalendar, FiTrendingUp, FiUsers, FiDollarSign, FiGrid } from 'react-icons/fi';
 import { FacebookShareButton, TwitterShareButton, LinkedinShareButton } from 'react-share';
-import { FaFacebook, FaTwitter, FaLinkedin, FaEthereum, FaWallet } from 'react-icons/fa';
+import { FaFacebook, FaTwitter, FaLinkedin, FaEthereum } from 'react-icons/fa';
+import { usePurchaseTokens } from '../hooks/usePurchaseTokens';
+import { useAccount } from 'wagmi';
+import { useState } from 'react';
+
+// ✅ InvestSection component — handles all wallet + purchase logic
+function InvestSection({ tokenId }) {
+  const [amount, setAmount] = useState(1);
+  const { isConnected } = useAccount();
+  const { purchase, isPending, isConfirming, isSuccess, hash } = usePurchaseTokens();
+
+  if (!isConnected) {
+    return (
+      <div className="p-4 bg-yellow-50 rounded-lg text-center">
+        <p className="text-yellow-700 font-medium">
+          ⚠️ Please connect your wallet first
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <input
+        type="number"
+        min="1"
+        value={amount}
+        onChange={(e) => setAmount(Number(e.target.value))}
+        className="border p-2 rounded w-full mb-2"
+        placeholder="Number of tokens"
+      />
+
+      <p className="text-sm text-secondary-600 mb-3">
+        Total: {(amount * 0.003).toFixed(4)} ETH (~${amount * 10})
+      </p>
+
+      <button
+        onClick={() => purchase(tokenId, amount, 0.003)}
+        disabled={isPending || isConfirming}
+        className="btn w-full mb-4 flex items-center justify-center"
+      >
+        {isPending
+          ? '⏳ Approve in MetaMask...'
+          : isConfirming
+            ? '⛓️ Confirming on blockchain...'
+            : '💰 Invest Now'}
+      </button>
+
+      {isSuccess && (
+        <div className="mt-3 p-3 bg-green-100 rounded">
+          <p className="text-green-700 font-bold">✅ NFT Tokens minted to your wallet!</p>
+          <a
+            href={`https://sepolia.etherscan.io/tx/${hash}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-600 underline text-sm"
+          >
+            View transaction on Etherscan →
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PropertyDetail() {
   const { id } = useParams();
@@ -42,7 +105,7 @@ function PropertyDetail() {
       totalTokens: 85000,
       availableTokens: 9350,
       tokenPrice: '$10',
-      tokenSymbol: 'VILLA425',
+      tokenId: parseInt(id),       // ✅ use tokenId instead of symbol
       contractAddress: '0x1234...5678',
       blockchain: 'Ethereum'
     },
@@ -77,7 +140,8 @@ function PropertyDetail() {
 
   return (
     <div className="min-h-screen bg-secondary-50">
-      {/* Navigation */}
+
+      {/* Breadcrumb Navigation */}
       <div className="bg-white shadow">
         <div className="container py-4">
           <div className="flex items-center space-x-2 text-sm">
@@ -93,8 +157,10 @@ function PropertyDetail() {
       {/* Main Content */}
       <div className="container py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column */}
+
+          {/* ── Left Column ── */}
           <div className="lg:col-span-2 space-y-8">
+
             {/* Image Gallery */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -121,7 +187,7 @@ function PropertyDetail() {
               </div>
             </motion.div>
 
-            {/* Property Details */}
+            {/* Property Details Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -130,10 +196,10 @@ function PropertyDetail() {
             >
               <h2 className="text-2xl font-bold mb-4">Property Details</h2>
               <p className="text-secondary-600 mb-6">{property.description}</p>
-              
+
+              {/* Quick Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div className="flex items-center space-x-2">
-                  {/* <FiBed className="text-primary-600" /> */}
                   <span>{property.parkingSpaces} Parking</span>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -150,6 +216,7 @@ function PropertyDetail() {
                 </div>
               </div>
 
+              {/* Features */}
               <h3 className="text-xl font-semibold mb-4">Features</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
                 {property.features.map((feature, index) => (
@@ -160,13 +227,14 @@ function PropertyDetail() {
                 ))}
               </div>
 
-              {/* Token Details */}
+              {/* Token Information */}
               <h3 className="text-xl font-semibold mb-4">Token Information</h3>
               <div className="bg-secondary-50 rounded-lg p-6 mb-6">
                 <div className="grid grid-cols-2 gap-4">
+                  {/* ✅ Token ID replaces confusing VILLA425 symbol */}
                   <div>
-                    <p className="text-sm text-secondary-600">Token Symbol</p>
-                    <p className="font-semibold">{property.tokenDetails.tokenSymbol}</p>
+                    <p className="text-sm text-secondary-600">Token ID</p>
+                    <p className="font-semibold">#{property.tokenDetails.tokenId}</p>
                   </div>
                   <div>
                     <p className="text-sm text-secondary-600">Token Price</p>
@@ -174,11 +242,15 @@ function PropertyDetail() {
                   </div>
                   <div>
                     <p className="text-sm text-secondary-600">Available Tokens</p>
-                    <p className="font-semibold">{property.tokenDetails.availableTokens.toLocaleString()}</p>
+                    <p className="font-semibold">
+                      {property.tokenDetails.availableTokens.toLocaleString()}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-secondary-600">Total Supply</p>
-                    <p className="font-semibold">{property.tokenDetails.totalTokens.toLocaleString()}</p>
+                    <p className="font-semibold">
+                      {property.tokenDetails.totalTokens.toLocaleString()}
+                    </p>
                   </div>
                   <div className="col-span-2">
                     <p className="text-sm text-secondary-600">Smart Contract</p>
@@ -187,7 +259,7 @@ function PropertyDetail() {
                 </div>
               </div>
 
-              {/* Financial Details */}
+              {/* Financial Overview */}
               <h3 className="text-xl font-semibold mb-4">Financial Overview</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-secondary-50 rounded-lg p-6">
@@ -208,7 +280,9 @@ function PropertyDetail() {
                   <div className="space-y-2">
                     {Object.entries(property.financials.expenses).map(([key, value]) => (
                       <div key={key} className="flex justify-between">
-                        <span className="text-secondary-600">{key.replace('_', ' ').charAt(0).toUpperCase() + key.slice(1)}</span>
+                        <span className="text-secondary-600">
+                          {key.replace('_', ' ').charAt(0).toUpperCase() + key.slice(1)}
+                        </span>
                         <span className="font-medium">{value}</span>
                       </div>
                     ))}
@@ -218,7 +292,7 @@ function PropertyDetail() {
             </motion.div>
           </div>
 
-          {/* Right Column */}
+          {/* ── Right Column ── */}
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -227,12 +301,16 @@ function PropertyDetail() {
           >
             {/* Investment Card */}
             <div className="bg-white rounded-lg shadow-md p-6">
+
+              {/* Price + ROI */}
               <div className="flex justify-between items-center mb-4">
                 <div>
                   <p className="text-sm text-secondary-500">Investment Price</p>
                   <div className="flex items-center">
                     <FiDollarSign className="text-primary-600" />
-                    <span className="text-2xl font-bold">${property.price.usd.toLocaleString()}</span>
+                    <span className="text-2xl font-bold">
+                      ${property.price.usd.toLocaleString()}
+                    </span>
                   </div>
                   <div className="flex items-center text-primary-600">
                     <FaEthereum className="mr-1" />
@@ -248,7 +326,7 @@ function PropertyDetail() {
                 </div>
               </div>
 
-              {/* Investment Metrics */}
+              {/* Metrics */}
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between">
                   <span className="text-secondary-600">Rental Yield</span>
@@ -280,20 +358,21 @@ function PropertyDetail() {
                   Min Investment: {property.metrics.minInvestment}
                 </p>
               </div>
-              
+
+              {/* 3D View Button */}
               <Link
-                to={`/property-3d`}
-                className="btn w-full mb-4 flex items-center justify-center">
+                to="/property-3d"
+                className="btn w-full mb-4 flex items-center justify-center"
+              >
                 <FiGrid className="mr-2" />
                 View 3D version
               </Link>
 
-              <button className="btn w-full mb-4 flex items-center justify-center">
-                <FaWallet className="mr-2" />
-                Connect Wallet to Invest
-              </button>
-              
-              <div className="flex items-center justify-center space-x-4 pt-4 border-t">
+              {/* ✅ Real invest section — replaces old hardcoded button */}
+              <InvestSection tokenId={property.tokenDetails.tokenId} />
+
+              {/* Social Share */}
+              <div className="flex items-center justify-center space-x-4 pt-4 border-t mt-4">
                 <FacebookShareButton url={shareUrl}>
                   <FaFacebook className="text-2xl text-blue-600 hover:opacity-80" />
                 </FacebookShareButton>
@@ -331,6 +410,7 @@ function PropertyDetail() {
                 Schedule Consultation
               </button>
             </div>
+
           </motion.div>
         </div>
       </div>
