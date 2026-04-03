@@ -1,7 +1,7 @@
 // src/constants/index.js
 
 // Paste your deployed contract address from Foundry broadcast output
-export const PROPERTY_CONTRACT_ADDRESS = "0x10c934a1e438a621f85622817466565527dc65b0"
+export const PROPERTY_CONTRACT_ADDRESS = "0xd60f1fa6082e08807d766e76794d770acde2cb5f"
 
 // Copy ABI from:
 // rentverse-contracts/out/RentVerseProperty.sol/RentVerseProperty.json

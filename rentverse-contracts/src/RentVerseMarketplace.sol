@@ -2,9 +2,10 @@
 pragma solidity ^0.8.30;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "./RentVerseProperty.sol";
 
-contract RentVerseMarketplace is ReentrancyGuard {
+contract RentVerseMarketplace is ReentrancyGuard, ERC1155Holder {
 
     RentVerseProperty public immutable propertyContract;
 
@@ -29,35 +30,44 @@ contract RentVerseMarketplace is ReentrancyGuard {
 
     // Seller lists their tokens for sale
     function listTokens(
-        uint256 _tokenId,
-        uint256 _amount,
-        uint256 _priceEach
-    ) external returns (uint256) {
-        require(_amount > 0, "Amount must be > 0");
-        require(_priceEach > 0, "Price must be > 0");
-        require(
-            propertyContract.balanceOf(msg.sender, _tokenId) >= _amount,
-            "Insufficient tokens"
-        );
+    uint256 _tokenId,
+    uint256 _amount,
+    uint256 _priceEach
+) external returns (uint256) {
+    require(_amount > 0, "Amount must be > 0");
+    require(_priceEach > 0, "Price must be > 0");
+    require(
+        propertyContract.balanceOf(msg.sender, _tokenId) >= _amount,
+        "Insufficient tokens"
+    );
 
-        // Seller must approve marketplace first
-        require(
-            propertyContract.isApprovedForAll(msg.sender, address(this)),
-            "Marketplace not approved"
-        );
+    require(
+        propertyContract.isApprovedForAll(msg.sender, address(this)),
+        "Marketplace not approved"
+    );
 
-        uint256 listingId = nextListingId++;
-        listings[listingId] = Listing({
-            seller: msg.sender,
-            tokenId: _tokenId,
-            amount: _amount,
-            priceEach: _priceEach,
-            isActive: true
-        });
+    // 🔥 LOCK TOKENS IN CONTRACT
+    propertyContract.safeTransferFrom(
+        msg.sender,
+        address(this),
+        _tokenId,
+        _amount,
+        ""
+    );
 
-        emit TokensListed(listingId, msg.sender, _tokenId, _amount, _priceEach);
-        return listingId;
-    }
+    uint256 listingId = nextListingId++;
+
+    listings[listingId] = Listing({
+        seller: msg.sender,
+        tokenId: _tokenId,
+        amount: _amount,
+        priceEach: _priceEach,
+        isActive: true
+    });
+
+    emit TokensListed(listingId, msg.sender, _tokenId, _amount, _priceEach);
+    return listingId;
+}
 
     // Buyer purchases listed tokens
     function buyTokens(uint256 _listingId, uint256 _amount)
@@ -65,6 +75,7 @@ contract RentVerseMarketplace is ReentrancyGuard {
         payable
         nonReentrant
     {
+        require(_amount > 0, "Invalid amount");
         Listing storage listing = listings[_listingId];
         require(listing.isActive, "Listing not active");
         require(_amount <= listing.amount, "Not enough tokens in listing");
@@ -75,7 +86,7 @@ contract RentVerseMarketplace is ReentrancyGuard {
 
         // Transfer tokens from seller to buyer
         propertyContract.safeTransferFrom(
-            listing.seller,
+            address(this),
             msg.sender,
             listing.tokenId,
             _amount,
@@ -91,10 +102,22 @@ contract RentVerseMarketplace is ReentrancyGuard {
 
     // Seller cancels their listing
     function cancelListing(uint256 _listingId) external {
-        Listing storage listing = listings[_listingId];
-        require(listing.seller == msg.sender, "Not your listing");
-        require(listing.isActive, "Already inactive");
-        listing.isActive = false;
-        emit ListingCancelled(_listingId);
-    }
+    Listing storage listing = listings[_listingId];
+
+    require(listing.seller == msg.sender, "Not your listing");
+    require(listing.isActive, "Already inactive");
+
+    listing.isActive = false;
+
+    // 🔥 RETURN TOKENS TO SELLER
+    propertyContract.safeTransferFrom(
+        address(this),
+        listing.seller,
+        listing.tokenId,
+        listing.amount,
+        ""
+    );
+
+    emit ListingCancelled(_listingId);
+}
 }

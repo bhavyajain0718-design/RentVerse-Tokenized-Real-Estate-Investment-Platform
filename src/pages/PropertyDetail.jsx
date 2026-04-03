@@ -1,17 +1,72 @@
+/* global BigInt */
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { FiHome, FiMaximize2, FiCalendar, FiTrendingUp, FiUsers, FiDollarSign, FiGrid } from 'react-icons/fi';
 import { FacebookShareButton, TwitterShareButton, LinkedinShareButton } from 'react-share';
 import { FaFacebook, FaTwitter, FaLinkedin, FaEthereum } from 'react-icons/fa';
 import { usePurchaseTokens } from '../hooks/usePurchaseTokens';
-import { useAccount } from 'wagmi';
-import { useState } from 'react';
+import { useAccount, useReadContract } from 'wagmi';
+import { useMemo, useState } from 'react';
+import { useMarketplace } from "../hooks/useMarketplace";
+import { PROPERTY_CONTRACT_ABI, PROPERTY_CONTRACT_ADDRESS } from '../constants';
 
 // ✅ InvestSection component — handles all wallet + purchase logic
 function InvestSection({ tokenId }) {
   const [amount, setAmount] = useState(1);
-  const { isConnected } = useAccount();
+  const [sellAmount, setSellAmount] = useState(1);
+  const [sellPrice, setSellPrice] = useState('0.003');
+  const [sellState, setSellState] = useState({ loading: false, message: '', error: '' });
+  const { address, isConnected } = useAccount();
   const { purchase, isPending, isConfirming, isSuccess, hash } = usePurchaseTokens();
+  const { listTokens } = useMarketplace();
+  const {
+    data: ownedBalance = 0n,
+    refetch: refetchOwnedBalance,
+  } = useReadContract({
+    address: PROPERTY_CONTRACT_ADDRESS,
+    abi: PROPERTY_CONTRACT_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address, BigInt(tokenId)] : undefined,
+    query: {
+      enabled: Boolean(address),
+    },
+  });
+
+  const ownedTokens = useMemo(() => Number(ownedBalance), [ownedBalance]);
+
+  const handleSell = async () => {
+    if (!sellAmount || sellAmount < 1) {
+      setSellState({ loading: false, message: '', error: 'Enter a valid token amount to sell.' });
+      return;
+    }
+
+    if (!sellPrice || Number(sellPrice) <= 0) {
+      setSellState({ loading: false, message: '', error: 'Enter a valid ETH price per token.' });
+      return;
+    }
+
+    if (sellAmount > ownedTokens) {
+      setSellState({ loading: false, message: '', error: 'You cannot sell more tokens than you own.' });
+      return;
+    }
+
+    try {
+      setSellState({ loading: true, message: '', error: '' });
+      await listTokens(tokenId, sellAmount, sellPrice);
+      await refetchOwnedBalance();
+      setSellState({
+        loading: false,
+        message: 'Sell listing created. You will receive ETH in your wallet when another investor buys your listed tokens.',
+        error: '',
+      });
+    } catch (error) {
+      setSellState({
+        loading: false,
+        message: '',
+        error: error?.reason || error?.message || 'Failed to create sell listing.',
+      });
+    }
+  };
 
   if (!isConnected) {
     return (
@@ -36,6 +91,10 @@ function InvestSection({ tokenId }) {
 
       <p className="text-sm text-secondary-600 mb-3">
         Total: {(amount * 0.003).toFixed(4)} ETH (~${amount * 10})
+      </p>
+
+      <p className="text-sm text-secondary-600 mb-4">
+        You currently own <span className="font-semibold">{ownedTokens}</span> token(s) of this property.
       </p>
 
       <button
@@ -63,6 +122,59 @@ function InvestSection({ tokenId }) {
           </a>
         </div>
       )}
+
+      <div className="border-t pt-4 mt-4">
+        <h4 className="font-semibold mb-2">Sell Your Tokens</h4>
+        <p className="text-sm text-secondary-600 mb-3">
+          This creates a marketplace listing. ETH is sent to your wallet when another investor buys your tokens.
+        </p>
+
+        <input
+          type="number"
+          min="1"
+          max={Math.max(ownedTokens, 1)}
+          value={sellAmount}
+          onChange={(e) => setSellAmount(Number(e.target.value))}
+          className="border p-2 rounded w-full mb-2"
+          placeholder="How many tokens to sell"
+        />
+
+        <input
+          type="number"
+          min="0.0001"
+          step="0.0001"
+          value={sellPrice}
+          onChange={(e) => setSellPrice(e.target.value)}
+          className="border p-2 rounded w-full mb-3"
+          placeholder="Price per token in ETH"
+        />
+
+        <button
+          onClick={handleSell}
+          disabled={sellState.loading || ownedTokens === 0}
+          className="btn w-full"
+        >
+          {sellState.loading ? 'Listing Tokens...' : 'Create Sell Listing'}
+        </button>
+
+        {ownedTokens === 0 && (
+          <p className="text-sm text-secondary-500 mt-2">
+            Buy tokens first, then you can list them for resale here.
+          </p>
+        )}
+
+        {sellState.message && (
+          <div className="mt-3 p-3 bg-blue-50 rounded">
+            <p className="text-blue-700 text-sm font-medium">{sellState.message}</p>
+          </div>
+        )}
+
+        {sellState.error && (
+          <div className="mt-3 p-3 bg-red-50 rounded">
+            <p className="text-red-700 text-sm font-medium">{sellState.error}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -106,7 +218,7 @@ function PropertyDetail() {
       availableTokens: 9350,
       tokenPrice: '$10',
       tokenId: parseInt(id) - 1,       // ✅ use tokenId instead of symbol
-      contractAddress: '0x10c934a1e438a621f85622817466565527dc65b0',
+      contractAddress: '0xd60f1fa6082e08807d766e76794d770acde2cb5f',
       blockchain: 'Ethereum'
     },
     financials: {

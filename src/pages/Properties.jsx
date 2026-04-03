@@ -3,9 +3,14 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { FiFilter, FiArrowRight, FiTrendingUp, FiDollarSign } from 'react-icons/fi';
 import { FaEthereum } from 'react-icons/fa';
+import { useEffect } from 'react';
+import { useMarketplace } from '../hooks/useMarketplace';
+import { ethers } from 'ethers';
 
 function Properties() {
   const [showFilters, setShowFilters] = useState(false);
+  const { fetchListings, buyTokens } = useMarketplace();
+  const [listings, setListings] = useState([]);
   const [filters, setFilters] = useState({
     priceRange: 'all',
     propertyType: 'all',
@@ -15,6 +20,19 @@ function Properties() {
     fundingStatus: 'all',
     sortBy: 'newest'
   });
+
+  useEffect(() => {
+    const loadListings = async () => {
+      try {
+        const data = await fetchListings();
+        setListings(data);
+      } catch (err) {
+        console.error("Error fetching listings:", err);
+      }
+    };
+
+    loadListings();
+  }, []);
 
   const properties = [
     {
@@ -106,7 +124,7 @@ function Properties() {
     if (filters.location && !property.location.toLowerCase().includes(filters.location.toLowerCase())) return false;
     if (filters.minROI && parseFloat(property.roi) < parseFloat(filters.minROI)) return false;
     if (filters.maxROI && parseFloat(property.roi) > parseFloat(filters.maxROI)) return false;
-    
+
     if (filters.priceRange !== 'all') {
       const [min, max] = filters.priceRange.split('-').map(Number);
       if (max && (property.price.usd < min || property.price.usd > max)) return false;
@@ -129,7 +147,7 @@ function Properties() {
           break
       }
     }
-    
+
     return true;
   });
 
@@ -367,6 +385,33 @@ function Properties() {
                 </div>
               </Link>
             </motion.div>
+          ))}
+        </div>
+      </div>
+      {/* 🔥 MARKETPLACE SECTION */}
+      <div className="container py-8">
+        <h2 className="text-2xl font-bold mb-4">Marketplace Listings</h2>
+
+        {listings.length === 0 && (
+          <p className="text-secondary-600">No listings available</p>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {listings.map((l) => (
+            <div key={l.id} className="bg-white p-4 rounded-lg shadow">
+
+              <p><strong>Token ID:</strong> {l.tokenId.toString()}</p>
+              <p><strong>Amount:</strong> {l.amount.toString()}</p>
+              <p><strong>Price:</strong> {ethers.utils.formatEther(l.priceEach)} ETH</p>
+
+              <button
+                className="btn w-full mt-3"
+                onClick={() => buyTokens(l.id, 1)}
+              >
+                Buy 1 Token
+              </button>
+
+            </div>
           ))}
         </div>
       </div>
