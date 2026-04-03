@@ -105,8 +105,8 @@ function PropertyDetail() {
       totalTokens: 85000,
       availableTokens: 9350,
       tokenPrice: '$10',
-      tokenId: parseInt(id),       // ✅ use tokenId instead of symbol
-      contractAddress: '0x1234...5678',
+      tokenId: parseInt(id) - 1,       // ✅ use tokenId instead of symbol
+      contractAddress: '0x10c934a1e438a621f85622817466565527dc65b0',
       blockchain: 'Ethereum'
     },
     financials: {

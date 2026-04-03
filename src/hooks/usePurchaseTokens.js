@@ -1,4 +1,5 @@
 // src/hooks/usePurchaseTokens.js
+/* global BigInt */
 import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseEther } from 'viem'
 import { PROPERTY_CONTRACT_ABI, PROPERTY_CONTRACT_ADDRESS } from '../constants'
