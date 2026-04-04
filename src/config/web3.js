@@ -2,8 +2,8 @@ import { ethers } from "ethers";
 import marketplaceArtifact from "../abis/Marketplace.json";
 import propertyArtifact from "../abis/Property.json";
 
-const MARKETPLACE_ADDRESS = "0x7a64ecd16aba0c8aafeac957c51b8acf6421e5ff";
-const PROPERTY_ADDRESS = "0xd60f1fa6082e08807d766e76794d770acde2cb5f";
+const MARKETPLACE_ADDRESS = "0x23c66b525e26b41bbafaea421b9ce596fb968b77";
+const PROPERTY_ADDRESS = "0x613a0e2db63f2c0185ac8b19b69984e0a3849628";
 
 export const getProvider = () => {
     return new ethers.providers.Web3Provider(window.ethereum);

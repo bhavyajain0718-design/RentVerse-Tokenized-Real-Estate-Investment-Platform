@@ -12,12 +12,14 @@ export function usePurchaseTokens() {
     const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
 
     const purchase = (tokenId, amount, pricePerTokenInEth) => {
+        const pricePerTokenWei = parseEther(String(pricePerTokenInEth))
+
         writeContract({
             address: PROPERTY_CONTRACT_ADDRESS,
             abi: PROPERTY_CONTRACT_ABI,
             functionName: 'purchaseTokens',
             args: [BigInt(tokenId), BigInt(amount)],
-            value: parseEther(String(pricePerTokenInEth * amount)), // converts to wei
+            value: pricePerTokenWei * BigInt(amount),
         })
     }
 
