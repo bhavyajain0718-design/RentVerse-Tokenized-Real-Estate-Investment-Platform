@@ -23,6 +23,20 @@ contract RentVerseRentDistributor is ReentrancyGuard {
     // Property manager deposits monthly rent
     function depositRent(uint256 _tokenId) external payable {
         require(msg.value > 0, "No ETH sent");
+        (
+            ,
+            ,
+            ,
+            ,
+            uint256 mintedSupply,
+            bool isActive,
+            address propertyWallet
+        ) = propertyContract.properties(_tokenId);
+
+        require(isActive, "Property not active");
+        require(mintedSupply > 0, "No investors yet");
+        require(msg.sender == propertyWallet, "Only property wallet");
+
         totalRentDeposited[_tokenId] += msg.value;
         emit RentDeposited(_tokenId, msg.value);
     }
@@ -32,13 +46,15 @@ contract RentVerseRentDistributor is ReentrancyGuard {
         uint256 investorTokens = propertyContract.balanceOf(msg.sender, _tokenId);
         require(investorTokens > 0, "No tokens held");
 
-        (, , uint256 totalSupply, , , , ) = propertyContract.properties(_tokenId);
+        (, , , , uint256 mintedSupply, bool isActive, ) = propertyContract.properties(_tokenId);
+        require(isActive, "Property not active");
+        require(mintedSupply > 0, "No investors yet");
 
-        uint256 share = (totalRentDeposited[_tokenId] * investorTokens) / totalSupply;
+        uint256 share = (totalRentDeposited[_tokenId] * investorTokens) / mintedSupply;
         uint256 alreadyClaimed = lastClaimed[_tokenId][msg.sender];
+        require(share > alreadyClaimed, "Nothing to claim");
         uint256 claimable = share - alreadyClaimed;
 
-        require(claimable > 0, "Nothing to claim");
         lastClaimed[_tokenId][msg.sender] = share;
 
         (bool success, ) = payable(msg.sender).call{value: claimable}("");

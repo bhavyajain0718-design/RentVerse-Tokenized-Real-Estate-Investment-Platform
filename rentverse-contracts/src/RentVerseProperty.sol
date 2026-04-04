@@ -60,7 +60,7 @@ contract RentVerseProperty is ERC1155, Ownable, ReentrancyGuard {
         require(prop.mintedSupply + _amount <= prop.totalSupply, "Exceeds supply");
         require(msg.value == prop.pricePerToken * _amount, "Incorrect ETH amount");
 
-        prop.mintedSupply += _amount;
+        prop.mintedSupply += _amount; // updating the minted ssupply
         investorShares[_tokenId][msg.sender] += _amount;
 
         _mint(msg.sender, _tokenId, _amount, "");

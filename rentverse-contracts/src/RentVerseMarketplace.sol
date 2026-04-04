@@ -46,7 +46,7 @@ contract RentVerseMarketplace is ReentrancyGuard, ERC1155Holder {
         "Marketplace not approved"
     );
 
-    // 🔥 LOCK TOKENS IN CONTRACT
+    // LOCK TOKENS IN CONTRACT
     propertyContract.safeTransferFrom(
         msg.sender,
         address(this),
@@ -109,7 +109,7 @@ contract RentVerseMarketplace is ReentrancyGuard, ERC1155Holder {
 
     listing.isActive = false;
 
-    // 🔥 RETURN TOKENS TO SELLER
+    //  RETURN TOKENS TO SELLER
     propertyContract.safeTransferFrom(
         address(this),
         listing.seller,

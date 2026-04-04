@@ -8,7 +8,14 @@ import { usePurchaseTokens } from '../hooks/usePurchaseTokens';
 import { useAccount, useReadContract } from 'wagmi';
 import { useMemo, useState } from 'react';
 import { useMarketplace } from "../hooks/useMarketplace";
-import { PROPERTY_CONTRACT_ABI, PROPERTY_CONTRACT_ADDRESS } from '../constants';
+import { useRentDistributor } from '../hooks/useRentDistributor';
+import rentDistributorArtifact from '../abis/RentDistributor.json';
+import {
+  PROPERTY_CONTRACT_ABI,
+  PROPERTY_CONTRACT_ADDRESS,
+  PROPERTY_MANAGER_ADDRESS,
+  RENT_DISTRIBUTOR_CONTRACT_ADDRESS,
+} from '../constants';
 
 // ✅ InvestSection component — handles all wallet + purchase logic
 function InvestSection({ tokenId }) {
@@ -16,9 +23,20 @@ function InvestSection({ tokenId }) {
   const [sellAmount, setSellAmount] = useState(1);
   const [sellPrice, setSellPrice] = useState('0.003');
   const [sellState, setSellState] = useState({ loading: false, message: '', error: '' });
+  const [rentAmount, setRentAmount] = useState('0.10');
+  const [rentAction, setRentAction] = useState('');
+  const [rentFeedback, setRentFeedback] = useState({ message: '', error: '' });
   const { address, isConnected } = useAccount();
   const { purchase, isPending, isConfirming, isSuccess, hash } = usePurchaseTokens();
   const { listTokens } = useMarketplace();
+  const {
+    depositRent,
+    claimRent,
+    hash: rentHash,
+    isPending: isRentPending,
+    isConfirming: isRentConfirming,
+    isSuccess: isRentSuccess,
+  } = useRentDistributor();
   const {
     data: ownedBalance = 0n,
     refetch: refetchOwnedBalance,
@@ -29,10 +47,83 @@ function InvestSection({ tokenId }) {
     args: address ? [address, BigInt(tokenId)] : undefined,
     query: {
       enabled: Boolean(address),
+      refetchInterval: 4000,
+    },
+  });
+  const { data: propertyData } = useReadContract({
+    address: PROPERTY_CONTRACT_ADDRESS,
+    abi: PROPERTY_CONTRACT_ABI,
+    functionName: 'properties',
+    args: [BigInt(tokenId)],
+    query: {
+      refetchInterval: 4000,
+    },
+  });
+  const { data: totalRentDeposited = 0n } = useReadContract({
+    address: RENT_DISTRIBUTOR_CONTRACT_ADDRESS,
+    abi: rentDistributorArtifact.abi,
+    functionName: 'totalRentDeposited',
+    args: [BigInt(tokenId)],
+    query: {
+      refetchInterval: 4000,
+    },
+  });
+  const { data: alreadyClaimed = 0n } = useReadContract({
+    address: RENT_DISTRIBUTOR_CONTRACT_ADDRESS,
+    abi: rentDistributorArtifact.abi,
+    functionName: 'lastClaimed',
+    args: address ? [BigInt(tokenId), address] : undefined,
+    query: {
+      enabled: Boolean(address),
+      refetchInterval: 4000,
     },
   });
 
   const ownedTokens = useMemo(() => Number(ownedBalance), [ownedBalance]);
+  const normalizedAddress = address?.toLowerCase();
+  const isPropertyManager =
+    normalizedAddress === PROPERTY_MANAGER_ADDRESS.toLowerCase();
+  const canClaimRent = !isPropertyManager && ownedTokens > 0;
+  const mintedSupply =
+    propertyData?.mintedSupply ??
+    propertyData?.[4] ??
+    0n;
+  const claimableRent = useMemo(() => {
+    if (ownedBalance <= 0n || mintedSupply <= 0n || totalRentDeposited <= 0n) {
+      return 0n;
+    }
+
+    const totalShare = (totalRentDeposited * ownedBalance) / mintedSupply;
+    if (totalShare <= alreadyClaimed) {
+      return 0n;
+    }
+
+    return totalShare - alreadyClaimed;
+  }, [alreadyClaimed, mintedSupply, ownedBalance, totalRentDeposited]);
+
+  const handleDepositRent = () => {
+    if (!rentAmount || Number(rentAmount) <= 0) {
+      setRentFeedback({ message: '', error: 'Enter a valid ETH amount to deposit as rent.' });
+      return;
+    }
+
+    setRentAction('deposit');
+    setRentFeedback({ message: '', error: '' });
+    depositRent(tokenId, rentAmount);
+  };
+
+  const handleClaimRent = () => {
+    if (claimableRent <= 0n) {
+      const message = 'Your rent has already been deposited to your wallet. Kindly wait for the next epoch. Thanks.';
+      setRentFeedback({ message, error: '' });
+      window.alert(message);
+      return;
+    }
+
+    setRentAction('claim');
+    setRentFeedback({ message: '', error: '' });
+    claimRent(tokenId);
+  };
 
   const handleSell = async () => {
     if (!sellAmount || sellAmount < 1) {
@@ -67,6 +158,19 @@ function InvestSection({ tokenId }) {
       });
     }
   };
+
+  const isRentActionLoading = isRentPending || isRentConfirming;
+
+  const rentStatusMessage = useMemo(() => {
+    if (!isRentSuccess) return '';
+    if (rentAction === 'deposit') {
+      return 'Rent deposited successfully. Investors can now claim their proportional share.';
+    }
+    if (rentAction === 'claim') {
+      return 'Rent claimed successfully. Your proportional ETH share has been sent to your wallet.';
+    }
+    return '';
+  }, [isRentSuccess, rentAction]);
 
   if (!isConnected) {
     return (
@@ -175,6 +279,98 @@ function InvestSection({ tokenId }) {
           </div>
         )}
       </div>
+
+      <div className="border-t pt-4 mt-4">
+        <h4 className="font-semibold mb-2">Rental Rewards</h4>
+
+        {isPropertyManager && (
+          <>
+            <p className="text-sm text-secondary-600 mb-3">
+              You are connected as the property manager. Deposit the net rent collected for this property.
+            </p>
+
+            <input
+              type="number"
+              min="0.0001"
+              step="0.0001"
+              value={rentAmount}
+              onChange={(e) => setRentAmount(e.target.value)}
+              className="border p-2 rounded w-full mb-3"
+              placeholder="Rent amount in ETH"
+            />
+
+            <button
+              onClick={handleDepositRent}
+              disabled={isRentActionLoading}
+              className="btn w-full"
+            >
+              {isRentPending && rentAction === 'deposit'
+                ? 'Approve Deposit in MetaMask...'
+                : isRentConfirming && rentAction === 'deposit'
+                  ? 'Confirming Rent Deposit...'
+                  : 'Deposit Rent'}
+            </button>
+          </>
+        )}
+
+        {canClaimRent && (
+          <>
+            <p className="text-sm text-secondary-600 mb-3">
+              You are connected as an investor. Claim your proportional share of the rent deposited for this property.
+            </p>
+
+            <p className="text-sm text-secondary-500 mb-3">
+              Claimable now: {(Number(claimableRent) / 1e18).toFixed(4)} ETH
+            </p>
+
+            <button
+              onClick={handleClaimRent}
+              disabled={isRentActionLoading}
+              className="btn w-full"
+            >
+              {isRentPending && rentAction === 'claim'
+                ? 'Approve Claim in MetaMask...'
+                : isRentConfirming && rentAction === 'claim'
+                  ? 'Confirming Claim...'
+                  : 'Claim Rent'}
+            </button>
+          </>
+        )}
+
+        {!isPropertyManager && !canClaimRent && (
+          <p className="text-sm text-secondary-500">
+            Connect the configured property manager wallet to deposit rent, or hold this property&apos;s ERC-1155 tokens to claim rent.
+          </p>
+        )}
+      </div>
+
+      {(isPropertyManager || canClaimRent) && rentStatusMessage && (
+        <div className="mt-3 p-3 bg-green-100 rounded">
+          <p className="text-green-700 font-medium">{rentStatusMessage}</p>
+          {rentHash && (
+            <a
+              href={`https://sepolia.etherscan.io/tx/${rentHash}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-blue-600 underline text-sm"
+            >
+              View rent transaction on Etherscan →
+            </a>
+          )}
+        </div>
+      )}
+
+      {(isPropertyManager || canClaimRent) && rentFeedback.message && (
+        <div className="mt-3 p-3 bg-blue-50 rounded">
+          <p className="text-blue-700 text-sm font-medium">{rentFeedback.message}</p>
+        </div>
+      )}
+
+      {(isPropertyManager || canClaimRent) && rentFeedback.error && (
+        <div className="mt-3 p-3 bg-red-50 rounded">
+          <p className="text-red-700 text-sm font-medium">{rentFeedback.error}</p>
+        </div>
+      )}
     </div>
   );
 }

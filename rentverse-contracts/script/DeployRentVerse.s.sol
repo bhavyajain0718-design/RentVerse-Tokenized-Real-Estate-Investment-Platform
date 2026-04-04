@@ -9,6 +9,9 @@ import {RentVerseRentDistributor} from "../src/RentVerseRentDistributor.sol";
 import {RentVerseMarketplace} from "../src/RentVerseMarketplace.sol";
 
 contract DeployRentVerse is Script {
+    address payable constant PROPERTY_MANAGER =
+        payable(0xC7C18Ef07E20d49F3451d95d19986a55dA1D6A82);
+
     function run() external {
         vm.startBroadcast();
 
@@ -27,7 +30,7 @@ contract DeployRentVerse is Script {
             "Austin, TX",
             85000,
             0.003 ether,
-            payable(msg.sender)
+            PROPERTY_MANAGER
         );
 
         vm.stopBroadcast();
