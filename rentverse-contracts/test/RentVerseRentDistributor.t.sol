@@ -76,4 +76,46 @@ contract RentVerseRentDistributorTest is Test {
         vm.expectRevert("Nothing to claim");
         distributor.claimRent(TOKEN_ID);
     }
+
+    function testCannotDepositZeroRent() public {
+        vm.prank(PROPERTY_MANAGER);
+        vm.expectRevert("No ETH sent");
+        distributor.depositRent{value: 0}(TOKEN_ID);
+    }
+
+    function testCannotDepositRentWhenNoInvestorsExist() public {
+        property.listProperty(
+            "Empty Property",
+            "Dallas, TX",
+            50,
+            TOKEN_PRICE,
+            payable(PROPERTY_MANAGER)
+        );
+
+        vm.prank(PROPERTY_MANAGER);
+        vm.expectRevert("No investors yet");
+        distributor.depositRent{value: 1 ether}(1);
+    }
+
+    function testCannotClaimRentWithoutHoldingTokens() public {
+        vm.prank(PROPERTY_MANAGER);
+        distributor.depositRent{value: 1 ether}(TOKEN_ID);
+
+        address noTokens = makeAddr("noTokens");
+        vm.prank(noTokens);
+        vm.expectRevert("No tokens held");
+        distributor.claimRent(TOKEN_ID);
+    }
+
+    function testCannotClaimRentBeforeAnyDeposit() public {
+        vm.prank(INVESTOR_ONE);
+        vm.expectRevert("Nothing to claim");
+        distributor.claimRent(TOKEN_ID);
+    }
+
+    function testCannotDepositRentForInactiveProperty() public {
+        vm.prank(PROPERTY_MANAGER);
+        vm.expectRevert("Property not active");
+        distributor.depositRent{value: 1 ether}(999);
+    }
 }

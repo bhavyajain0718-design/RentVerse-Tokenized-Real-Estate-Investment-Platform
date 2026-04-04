@@ -8,6 +8,7 @@ import {RentVerseProperty} from "../src/RentVerseProperty.sol";
 contract RentVersePropertyTest is Test {
     RentVerseProperty property;
     address USER = makeAddr("user");
+    address NON_OWNER = makeAddr("nonOwner");
     uint256 constant TOKEN_PRICE = 0.003 ether;
 
     // ✅ ADD THIS — allows test contract to receive ETH
@@ -44,5 +45,31 @@ contract RentVersePropertyTest is Test {
         vm.prank(USER);
         property.purchaseTokens{value: TOKEN_PRICE * amount}(0, amount);
         assertEq(property.balanceOf(USER, 0), amount);
+    }
+
+    function testOnlyOwnerCanListProperty() public {
+        vm.prank(NON_OWNER);
+        vm.expectRevert();
+        property.listProperty(
+            "Unauthorized Villa",
+            "Nowhere",
+            100,
+            TOKEN_PRICE,
+            payable(NON_OWNER)
+        );
+    }
+
+    function testCannotPurchaseWithIncorrectEthAmount() public {
+        vm.deal(USER, 1 ether);
+        vm.prank(USER);
+        vm.expectRevert("Incorrect ETH amount");
+        property.purchaseTokens{value: TOKEN_PRICE * 2}(0, 1);
+    }
+
+    function testCannotPurchaseInactiveProperty() public {
+        vm.deal(USER, 1 ether);
+        vm.prank(USER);
+        vm.expectRevert("Property not active");
+        property.purchaseTokens{value: TOKEN_PRICE}(999, 1);
     }
 }

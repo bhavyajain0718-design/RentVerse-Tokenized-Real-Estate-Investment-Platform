@@ -12,17 +12,22 @@ contract DeployRentVerse is Script {
     address payable constant PROPERTY_MANAGER =
         payable(0xC7C18Ef07E20d49F3451d95d19986a55dA1D6A82);
 
-    function run() external {
-        vm.startBroadcast();
-
+    function deploy()
+        public
+        returns (
+            RentVerseProperty property,
+            RentVerseMarketplace marketplace,
+            RentVerseRentDistributor distributor
+        )
+    {
         // 1. Deploy Property Contract
-        RentVerseProperty property = new RentVerseProperty();
+        property = new RentVerseProperty();
 
         // 2. Deploy Marketplace (IMPORTANT 🔥)
-        RentVerseMarketplace marketplace = new RentVerseMarketplace(address(property));
+        marketplace = new RentVerseMarketplace(address(property));
 
         // 3. Deploy Rent Distributor
-        RentVerseRentDistributor distributor = new RentVerseRentDistributor(address(property));
+        distributor = new RentVerseRentDistributor(address(property));
 
         // 4. Create initial property
         property.listProperty(
@@ -32,6 +37,16 @@ contract DeployRentVerse is Script {
             0.003 ether,
             PROPERTY_MANAGER
         );
+    }
+
+    function run() external {
+        vm.startBroadcast();
+
+        (
+            RentVerseProperty property,
+            RentVerseMarketplace marketplace,
+            RentVerseRentDistributor distributor
+        ) = deploy();
 
         vm.stopBroadcast();
 
