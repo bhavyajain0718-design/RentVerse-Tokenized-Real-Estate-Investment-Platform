@@ -5,6 +5,13 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./RentVerseProperty.sol";
 
 contract RentVerseRentDistributor is ReentrancyGuard {
+    error NoEthSent();
+    error PropertyNotActive();
+    error NoInvestorsYet();
+    error OnlyPropertyWallet();
+    error NoTokensHeld();
+    error NothingToClaim();
+    error TransferFailed();
 
     RentVerseProperty public immutable propertyContract;
 
@@ -22,7 +29,7 @@ contract RentVerseRentDistributor is ReentrancyGuard {
 
     // Property manager deposits monthly rent
     function depositRent(uint256 _tokenId) external payable {
-        require(msg.value > 0, "No ETH sent");
+        if (msg.value == 0) revert NoEthSent();
         (
             ,
             ,
@@ -33,9 +40,9 @@ contract RentVerseRentDistributor is ReentrancyGuard {
             address propertyWallet
         ) = propertyContract.properties(_tokenId);
 
-        require(isActive, "Property not active");
-        require(mintedSupply > 0, "No investors yet");
-        require(msg.sender == propertyWallet, "Only property wallet");
+        if (!isActive) revert PropertyNotActive();
+        if (mintedSupply == 0) revert NoInvestorsYet();
+        if (msg.sender != propertyWallet) revert OnlyPropertyWallet();
 
         totalRentDeposited[_tokenId] += msg.value;
         emit RentDeposited(_tokenId, msg.value);
@@ -44,21 +51,22 @@ contract RentVerseRentDistributor is ReentrancyGuard {
     // Investor claims their share
     function claimRent(uint256 _tokenId) external nonReentrant {
         uint256 investorTokens = propertyContract.balanceOf(msg.sender, _tokenId);
-        require(investorTokens > 0, "No tokens held");
+        if (investorTokens == 0) revert NoTokensHeld();
 
         (, , , , uint256 mintedSupply, bool isActive, ) = propertyContract.properties(_tokenId);
-        require(isActive, "Property not active");
-        require(mintedSupply > 0, "No investors yet");
+        if (!isActive) revert PropertyNotActive();
+        if (mintedSupply == 0) revert NoInvestorsYet();
 
-        uint256 share = (totalRentDeposited[_tokenId] * investorTokens) / mintedSupply;
+        uint256 depositedRent = totalRentDeposited[_tokenId];
+        uint256 share = (depositedRent * investorTokens) / mintedSupply;
         uint256 alreadyClaimed = lastClaimed[_tokenId][msg.sender];
-        require(share > alreadyClaimed, "Nothing to claim");
+        if (share <= alreadyClaimed) revert NothingToClaim();
         uint256 claimable = share - alreadyClaimed;
 
         lastClaimed[_tokenId][msg.sender] = share;
 
         (bool success, ) = payable(msg.sender).call{value: claimable}("");
-        require(success, "Transfer failed");
+        if (!success) revert TransferFailed();
 
         emit RentClaimed(_tokenId, msg.sender, claimable);
     }

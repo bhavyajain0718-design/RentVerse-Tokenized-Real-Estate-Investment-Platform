@@ -11,6 +11,7 @@ contract DeployRentVerseTest is Test {
     address constant PROPERTY_MANAGER =
         0xC7C18Ef07E20d49F3451d95d19986a55dA1D6A82;
 
+    // Verifies deployment creates all contracts and wires their dependencies correctly.
     function testDeployCreatesAndWiresContracts() public {
         DeployRentVerse script = new DeployRentVerse();
 
@@ -47,6 +48,7 @@ contract DeployRentVerseTest is Test {
         assertEq(property.nextPropertyId(), 1);
     }
 
+    // Verifies the script entrypoint runs end to end without reverting.
     function testRunExecutesWithoutReverting() public {
         DeployRentVerse script = new DeployRentVerse();
         script.run();

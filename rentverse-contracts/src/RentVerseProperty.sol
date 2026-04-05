@@ -6,6 +6,10 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract RentVerseProperty is ERC1155, Ownable, ReentrancyGuard {
+    error PropertyNotActive();
+    error ExceedsSupply();
+    error IncorrectEthAmount();
+    error EthTransferFailed();
 
     struct Property {
         string name;          // "Modern Villa with Pool"
@@ -36,7 +40,11 @@ contract RentVerseProperty is ERC1155, Ownable, ReentrancyGuard {
         uint256 _pricePerToken,
         address payable _propertyWallet
     ) external onlyOwner returns (uint256) {
-        uint256 tokenId = nextPropertyId++;
+        uint256 tokenId = nextPropertyId;
+        // Gas: skip checked arithmetic on the monotonic id after capturing the current value.
+        unchecked {
+            nextPropertyId = tokenId + 1;
+        }
         properties[tokenId] = Property({
             name: _name,
             location: _location,
@@ -56,17 +64,27 @@ contract RentVerseProperty is ERC1155, Ownable, ReentrancyGuard {
         nonReentrant 
     {
         Property storage prop = properties[_tokenId];
-        require(prop.isActive, "Property not active");
-        require(prop.mintedSupply + _amount <= prop.totalSupply, "Exceeds supply");
-        require(msg.value == prop.pricePerToken * _amount, "Incorrect ETH amount");
+        if (!prop.isActive) revert PropertyNotActive();
 
-        prop.mintedSupply += _amount; // updating the minted ssupply
+        uint256 mintedSupply = prop.mintedSupply;
+        uint256 totalSupply = prop.totalSupply;
+        if (_amount > totalSupply - mintedSupply) revert ExceedsSupply();
+
+        uint256 pricePerToken = prop.pricePerToken;
+        uint256 totalCost = pricePerToken * _amount;
+        if (msg.value != totalCost) revert IncorrectEthAmount();
+
+        // Gas: reuse cached values and write the updated supply once after the bounds check above.
+        unchecked {
+            prop.mintedSupply = mintedSupply + _amount;
+        }
         investorShares[_tokenId][msg.sender] += _amount;
 
         _mint(msg.sender, _tokenId, _amount, "");
 
-        // Forward ETH to property wallet
-        prop.propertyWallet.transfer(msg.value);
+        address payable propertyWallet = prop.propertyWallet;
+        (bool success, ) = propertyWallet.call{value: msg.value}("");
+        if (!success) revert EthTransferFailed();
 
         emit TokensPurchased(_tokenId, msg.sender, _amount);
     }

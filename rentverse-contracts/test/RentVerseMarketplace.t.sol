@@ -50,6 +50,7 @@ contract RentVerseMarketplaceTest is Test {
         listingId = marketplace.listTokens(TOKEN_ID, amount, LIST_PRICE);
     }
 
+    // Verifies listing moves the seller's tokens into marketplace escrow.
     function testListTokensTransfersTokensIntoMarketplace() public {
         uint256 listingId = _createListing(4);
 
@@ -71,33 +72,38 @@ contract RentVerseMarketplaceTest is Test {
         assertTrue(isActive);
     }
 
+    // Verifies sellers cannot create listings with zero token amount.
     function testCannotListZeroAmount() public {
         _approveMarketplace(SELLER);
         vm.prank(SELLER);
-        vm.expectRevert("Amount must be > 0");
+        vm.expectRevert(RentVerseMarketplace.AmountMustBeGreaterThanZero.selector);
         marketplace.listTokens(TOKEN_ID, 0, LIST_PRICE);
     }
 
+    // Verifies sellers cannot create listings with zero token price.
     function testCannotListZeroPrice() public {
         _approveMarketplace(SELLER);
         vm.prank(SELLER);
-        vm.expectRevert("Price must be > 0");
+        vm.expectRevert(RentVerseMarketplace.PriceMustBeGreaterThanZero.selector);
         marketplace.listTokens(TOKEN_ID, 1, 0);
     }
 
+    // Verifies sellers cannot list more tokens than they currently hold.
     function testCannotListWithoutEnoughTokens() public {
         _approveMarketplace(SELLER);
         vm.prank(SELLER);
-        vm.expectRevert("Insufficient tokens");
+        vm.expectRevert(RentVerseMarketplace.InsufficientTokens.selector);
         marketplace.listTokens(TOKEN_ID, 11, LIST_PRICE);
     }
 
+    // Verifies listings require prior ERC1155 approval for the marketplace.
     function testCannotListWithoutMarketplaceApproval() public {
         vm.prank(SELLER);
-        vm.expectRevert("Marketplace not approved");
+        vm.expectRevert(RentVerseMarketplace.MarketplaceNotApproved.selector);
         marketplace.listTokens(TOKEN_ID, 1, LIST_PRICE);
     }
 
+    // Verifies a successful purchase transfers tokens to the buyer and ETH to the seller.
     function testBuyTokensTransfersTokensAndPaysSeller() public {
         uint256 listingId = _createListing(4);
         uint256 sellerBalanceBefore = SELLER.balance;
@@ -114,6 +120,7 @@ contract RentVerseMarketplaceTest is Test {
         assertTrue(isActive);
     }
 
+    // Verifies buying the final listed amount closes the listing.
     function testBuyingEntireListingDeactivatesIt() public {
         uint256 listingId = _createListing(2);
 
@@ -125,14 +132,16 @@ contract RentVerseMarketplaceTest is Test {
         assertFalse(isActive);
     }
 
+    // Verifies buyers cannot request zero tokens from a listing.
     function testCannotBuyZeroAmount() public {
         uint256 listingId = _createListing(2);
 
         vm.prank(BUYER);
-        vm.expectRevert("Invalid amount");
+        vm.expectRevert(RentVerseMarketplace.AmountMustBeGreaterThanZero.selector);
         marketplace.buyTokens{value: 0}(listingId, 0);
     }
 
+    // Verifies inactive listings cannot be purchased.
     function testCannotBuyInactiveListing() public {
         uint256 listingId = _createListing(1);
 
@@ -140,26 +149,29 @@ contract RentVerseMarketplaceTest is Test {
         marketplace.cancelListing(listingId);
 
         vm.prank(BUYER);
-        vm.expectRevert("Listing not active");
+        vm.expectRevert(RentVerseMarketplace.ListingNotActive.selector);
         marketplace.buyTokens{value: LIST_PRICE}(listingId, 1);
     }
 
+    // Verifies buyers cannot purchase more tokens than the listing still holds.
     function testCannotBuyMoreThanListedAmount() public {
         uint256 listingId = _createListing(2);
 
         vm.prank(BUYER);
-        vm.expectRevert("Not enough tokens in listing");
+        vm.expectRevert(RentVerseMarketplace.NotEnoughTokensInListing.selector);
         marketplace.buyTokens{value: LIST_PRICE * 3}(listingId, 3);
     }
 
+    // Verifies purchases revert when the payment does not match the listing price.
     function testCannotBuyWithIncorrectEth() public {
         uint256 listingId = _createListing(2);
 
         vm.prank(BUYER);
-        vm.expectRevert("Incorrect ETH");
+        vm.expectRevert(RentVerseMarketplace.IncorrectEth.selector);
         marketplace.buyTokens{value: LIST_PRICE}(listingId, 2);
     }
 
+    // Verifies cancellation returns escrowed tokens back to the seller.
     function testCancelListingReturnsTokensToSeller() public {
         uint256 listingId = _createListing(3);
 
@@ -174,14 +186,16 @@ contract RentVerseMarketplaceTest is Test {
         assertFalse(isActive);
     }
 
+    // Verifies only the original seller can cancel their listing.
     function testOnlySellerCanCancelListing() public {
         uint256 listingId = _createListing(2);
 
         vm.prank(OTHER);
-        vm.expectRevert("Not your listing");
+        vm.expectRevert(RentVerseMarketplace.NotYourListing.selector);
         marketplace.cancelListing(listingId);
     }
 
+    // Verifies a listing cannot be canceled twice.
     function testCannotCancelAlreadyInactiveListing() public {
         uint256 listingId = _createListing(2);
 
@@ -189,7 +203,7 @@ contract RentVerseMarketplaceTest is Test {
         marketplace.cancelListing(listingId);
 
         vm.prank(SELLER);
-        vm.expectRevert("Already inactive");
+        vm.expectRevert(RentVerseMarketplace.AlreadyInactive.selector);
         marketplace.cancelListing(listingId);
     }
 }

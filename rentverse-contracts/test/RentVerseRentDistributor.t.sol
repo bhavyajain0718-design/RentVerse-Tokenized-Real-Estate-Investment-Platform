@@ -39,12 +39,14 @@ contract RentVerseRentDistributorTest is Test {
         property.purchaseTokens{value: TOKEN_PRICE * 30}(TOKEN_ID, 30);
     }
 
+    // Verifies only the configured property wallet can deposit rent.
     function testDepositRentOnlyPropertyWallet() public {
         vm.prank(INVESTOR_ONE);
-        vm.expectRevert("Only property wallet");
+        vm.expectRevert(RentVerseRentDistributor.OnlyPropertyWallet.selector);
         distributor.depositRent{value: 1 ether}(TOKEN_ID);
     }
 
+    // Verifies rent claims are split according to each holder's token balance.
     function testClaimRentDistributesByMintedSupply() public {
         vm.prank(PROPERTY_MANAGER);
         distributor.depositRent{value: 4 ether}(TOKEN_ID);
@@ -62,6 +64,7 @@ contract RentVerseRentDistributorTest is Test {
         assertEq(INVESTOR_TWO.balance - investorTwoBalanceBefore, 3 ether);
     }
 
+    // Verifies a second deposit increases future claimable rent without double-paying old rent.
     function testClaimRentAcrossMultipleDeposits() public {
         vm.startPrank(PROPERTY_MANAGER);
         distributor.depositRent{value: 4 ether}(TOKEN_ID);
@@ -73,16 +76,18 @@ contract RentVerseRentDistributorTest is Test {
         assertEq(INVESTOR_ONE.balance, 10 ether - (TOKEN_PRICE * 10) + 1.5 ether);
 
         vm.prank(INVESTOR_ONE);
-        vm.expectRevert("Nothing to claim");
+        vm.expectRevert(RentVerseRentDistributor.NothingToClaim.selector);
         distributor.claimRent(TOKEN_ID);
     }
 
+    // Verifies zero-value rent deposits are rejected.
     function testCannotDepositZeroRent() public {
         vm.prank(PROPERTY_MANAGER);
-        vm.expectRevert("No ETH sent");
+        vm.expectRevert(RentVerseRentDistributor.NoEthSent.selector);
         distributor.depositRent{value: 0}(TOKEN_ID);
     }
 
+    // Verifies rent cannot be deposited before any investor owns tokens.
     function testCannotDepositRentWhenNoInvestorsExist() public {
         property.listProperty(
             "Empty Property",
@@ -93,29 +98,32 @@ contract RentVerseRentDistributorTest is Test {
         );
 
         vm.prank(PROPERTY_MANAGER);
-        vm.expectRevert("No investors yet");
+        vm.expectRevert(RentVerseRentDistributor.NoInvestorsYet.selector);
         distributor.depositRent{value: 1 ether}(1);
     }
 
+    // Verifies accounts with no tokens cannot claim rent.
     function testCannotClaimRentWithoutHoldingTokens() public {
         vm.prank(PROPERTY_MANAGER);
         distributor.depositRent{value: 1 ether}(TOKEN_ID);
 
         address noTokens = makeAddr("noTokens");
         vm.prank(noTokens);
-        vm.expectRevert("No tokens held");
+        vm.expectRevert(RentVerseRentDistributor.NoTokensHeld.selector);
         distributor.claimRent(TOKEN_ID);
     }
 
+    // Verifies claiming before any rent deposit reverts.
     function testCannotClaimRentBeforeAnyDeposit() public {
         vm.prank(INVESTOR_ONE);
-        vm.expectRevert("Nothing to claim");
+        vm.expectRevert(RentVerseRentDistributor.NothingToClaim.selector);
         distributor.claimRent(TOKEN_ID);
     }
 
+    // Verifies rent deposits fail for unknown or inactive properties.
     function testCannotDepositRentForInactiveProperty() public {
         vm.prank(PROPERTY_MANAGER);
-        vm.expectRevert("Property not active");
+        vm.expectRevert(RentVerseRentDistributor.PropertyNotActive.selector);
         distributor.depositRent{value: 1 ether}(999);
     }
 }

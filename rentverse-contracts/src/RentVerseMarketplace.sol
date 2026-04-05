@@ -6,6 +6,16 @@ import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "./RentVerseProperty.sol";
 
 contract RentVerseMarketplace is ReentrancyGuard, ERC1155Holder {
+    error AmountMustBeGreaterThanZero();
+    error PriceMustBeGreaterThanZero();
+    error InsufficientTokens();
+    error MarketplaceNotApproved();
+    error ListingNotActive();
+    error NotEnoughTokensInListing();
+    error IncorrectEth();
+    error PaymentFailed();
+    error NotYourListing();
+    error AlreadyInactive();
 
     RentVerseProperty public immutable propertyContract;
 
@@ -34,19 +44,12 @@ contract RentVerseMarketplace is ReentrancyGuard, ERC1155Holder {
     uint256 _amount,
     uint256 _priceEach
 ) external returns (uint256) {
-    require(_amount > 0, "Amount must be > 0");
-    require(_priceEach > 0, "Price must be > 0");
-    require(
-        propertyContract.balanceOf(msg.sender, _tokenId) >= _amount,
-        "Insufficient tokens"
-    );
+    if (_amount == 0) revert AmountMustBeGreaterThanZero();
+    if (_priceEach == 0) revert PriceMustBeGreaterThanZero();
+    if (propertyContract.balanceOf(msg.sender, _tokenId) < _amount) revert InsufficientTokens();
 
-    require(
-        propertyContract.isApprovedForAll(msg.sender, address(this)),
-        "Marketplace not approved"
-    );
+    if (!propertyContract.isApprovedForAll(msg.sender, address(this))) revert MarketplaceNotApproved();
 
-    // LOCK TOKENS IN CONTRACT
     propertyContract.safeTransferFrom(
         msg.sender,
         address(this),
@@ -55,15 +58,18 @@ contract RentVerseMarketplace is ReentrancyGuard, ERC1155Holder {
         ""
     );
 
-    uint256 listingId = nextListingId++;
+    uint256 listingId = nextListingId;
+    // Gas: unchecked increment is safe because listing ids only ever move upward.
+    unchecked {
+        nextListingId = listingId + 1;
+    }
 
-    listings[listingId] = Listing({
-        seller: msg.sender,
-        tokenId: _tokenId,
-        amount: _amount,
-        priceEach: _priceEach,
-        isActive: true
-    });
+    Listing storage listing = listings[listingId];
+    listing.seller = msg.sender;
+    listing.tokenId = _tokenId;
+    listing.amount = _amount;
+    listing.priceEach = _priceEach;
+    listing.isActive = true;
 
     emit TokensListed(listingId, msg.sender, _tokenId, _amount, _priceEach);
     return listingId;
@@ -75,27 +81,38 @@ contract RentVerseMarketplace is ReentrancyGuard, ERC1155Holder {
         payable
         nonReentrant
     {
-        require(_amount > 0, "Invalid amount");
+        if (_amount == 0) revert AmountMustBeGreaterThanZero();
+
         Listing storage listing = listings[_listingId];
-        require(listing.isActive, "Listing not active");
-        require(_amount <= listing.amount, "Not enough tokens in listing");
-        require(msg.value == listing.priceEach * _amount, "Incorrect ETH");
+        if (!listing.isActive) revert ListingNotActive();
 
-        listing.amount -= _amount;
-        if (listing.amount == 0) listing.isActive = false;
+        uint256 listedAmount = listing.amount;
+        if (_amount > listedAmount) revert NotEnoughTokensInListing();
 
-        // Transfer tokens from seller to buyer
+        uint256 priceEach = listing.priceEach;
+        if (msg.value != priceEach * _amount) revert IncorrectEth();
+
+        uint256 remainingAmount;
+        // Gas: reuse cached listing amount and write back the reduced amount once.
+        unchecked {
+            remainingAmount = listedAmount - _amount;
+        }
+        listing.amount = remainingAmount;
+        if (remainingAmount == 0) listing.isActive = false;
+
+        uint256 tokenId = listing.tokenId;
+        address seller = listing.seller;
+
         propertyContract.safeTransferFrom(
             address(this),
             msg.sender,
-            listing.tokenId,
+            tokenId,
             _amount,
             ""
         );
 
-        // Pay seller
-        (bool success, ) = payable(listing.seller).call{value: msg.value}("");
-        require(success, "Payment failed");
+        (bool success, ) = payable(seller).call{value: msg.value}("");
+        if (!success) revert PaymentFailed();
 
         emit TokensSold(_listingId, msg.sender, _amount);
     }
@@ -104,17 +121,20 @@ contract RentVerseMarketplace is ReentrancyGuard, ERC1155Holder {
     function cancelListing(uint256 _listingId) external {
     Listing storage listing = listings[_listingId];
 
-    require(listing.seller == msg.sender, "Not your listing");
-    require(listing.isActive, "Already inactive");
+    if (listing.seller != msg.sender) revert NotYourListing();
+    if (!listing.isActive) revert AlreadyInactive();
+
+    address seller = listing.seller;
+    uint256 tokenId = listing.tokenId;
+    uint256 amount = listing.amount;
 
     listing.isActive = false;
 
-    //  RETURN TOKENS TO SELLER
     propertyContract.safeTransferFrom(
         address(this),
-        listing.seller,
-        listing.tokenId,
-        listing.amount,
+        seller,
+        tokenId,
+        amount,
         ""
     );
 
